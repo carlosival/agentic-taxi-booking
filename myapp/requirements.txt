@@ -1,0 +1,30 @@
+# Web Framework
+fastapi[standard]>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# LangChain & AI
+langchain>=0.1.0
+langchain-ollama>=0.1.0
+langgraph>=0.1.0
+
+# Database & Storage
+redis>=4.5.0
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.25.0
+
+# Message Queue
+taskiq[rabbitmq]
+taskiq-aio-pika
+
+# S3 Storage
+minio
+
+# Utilities
+requests>=2.31.0
+asgiref
+python-telegram-bot
+
+# Development
+debugpy>=1.8.0      
+pytest-asyncio
+

@@ -1,0 +1,169 @@
+services:
+  myapp:
+    container_name: myapp
+    
+    build:
+      context: ./myapp
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./myapp:/app
+    depends_on:
+      - ollama
+      - redis
+      - postgres
+      - rabbitmq
+      - taskiq_worker
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=postgres   # <-- add DB env vars
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=taxi
+      - RABBITMQ_HOST=rabbitmq   # <-- add RabbitMQ env vars
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=myuser
+      - RABBITMQ_PASSWORD=mypassword
+      - PORT=3000
+      - WHATSAPP_TOKEN=TDDSSAX...
+      - WHATSAPP_PHONE_NUMBER_ID=7517...
+      - TELEGRAM_TOKEN=84...
+      - DOMAIN=epiphanic-example.domain.ngrok-free.dev
+
+      
+    command: uvicorn app:app --host 0.0.0.0 --port 3000 --reload  # Correct command to start the app
+    restart: unless-stopped  # Uncomment this if you want automatic restarts
+
+  taskiq_worker:
+    container_name: taskiq_worker
+    build:
+      context: ./myapp
+    volumes:
+      - ./myapp:/app
+    environment:
+      - POSTGRES_HOST=postgres   # <-- add DB env vars
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=taxi
+      - RABBITMQ_HOST=rabbitmq   # <-- add RabbitMQ env vars
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=myuser
+      - RABBITMQ_PASSWORD=mypassword
+      - TELEGRAM_TOKEN=8413....
+    command: taskiq worker jobs.worker:broker
+    depends_on:
+      rabbitmq:
+          condition: service_healthy
+      postgres:
+          condition: service_started
+
+    restart: unless-stopped
+
+
+  ngrok:
+    container_name: ngrok
+    image: ngrok/ngrok
+    environment:
+      - NGROK_AUTHTOKEN=1g22y8HQ9Wd4goVV66s1uwcoqq3_DvD1vR8poBV4JiErwZ5H
+    command: http --domain=epiphanic-domain.ngrok-free.dev myapp:3000 
+    depends_on:
+      - myapp
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    command: serve
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"     # AMQP protocol port
+      - "15672:15672"   # Management web UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=myuser
+      - RABBITMQ_DEFAULT_PASS=mypassword
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=taxi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+    # ---- MinIO Service S3 Storage ----
+  minio:
+    image: minio/minio
+    container_name: minio
+    command: server /data --console-address ":9090"
+    environment:
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio123
+    ports:
+      - "9000:9000"   # S3 API
+      - "9090:9090"   # Web console
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped  
+
+  init_db:
+    build:
+      context: ./myapp
+    volumes:
+      - ./myapp:/app  
+    command: python -m db.init_db
+    depends_on:
+      - postgres
+    environment:
+      - POSTGRES_HOST=postgres   # <-- add DB env vars
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=taxi
+
+volumes:
+  ollama_data:
+  redis_data:
+  postgres_data:
+  rabbitmq_data:
+  minio_data:
+

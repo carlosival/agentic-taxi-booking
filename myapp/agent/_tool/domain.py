@@ -1,0 +1,9 @@
+from typing import Protocol, Any
+
+class Tool(Protocol):
+    def name(self) -> str:
+        ...
+    def description(self) -> str:
+        ...
+    def use(self, *args, **kwargs) ->Any:
+        ...

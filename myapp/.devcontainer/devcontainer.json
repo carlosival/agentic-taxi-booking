@@ -1,0 +1,15 @@
+{
+    "name": "myapp-dev",
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "myapp",
+    "workspaceFolder": "/app",
+    "remoteUser": "root",
+    "postCreateCommand": "uv pip install --system --no-cache",
+    "settings": {
+      "python.pythonPath": "/usr/local/bin/python"
+    },
+    "extensions": [
+      "ms-python.python",
+      "ms-python.vscode-pylance"
+    ]
+  }

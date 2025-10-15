@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+export POSTGRES_USER=root
+export POSTGRES_PASSWORD="gfdghfh.."
+export POSTGRES_DB=taxi
+export RABBITMQ_USER=root
+export RABBITMQ_PASSWORD="hghg.."
+export REDIS_PASSWORD="vfghyhgh.."
+export WHATSAPP_TOKEN="AUEEH..."
+export TELEGRAM_TOKEN="turty..."
+export MINIO_USER=root
+export MINIO_PASSWORD="gfhgh..."

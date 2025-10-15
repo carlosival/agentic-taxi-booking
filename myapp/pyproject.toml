@@ -1,0 +1,23 @@
+[project]
+name = "myapp"
+version = "0.1.0"
+description = "My FastAPI app with Ollama integration"
+requires-python = ">=3.12"
+
+dependencies = [ 
+  "fastapi[standard]",
+  "uvicorn[standard]",
+  "langchain",
+  "langchain-ollama",
+  "langgraph",
+  "debugpy",
+  "requests",
+  "sqlalchemy",
+  "psycopg2-binary",   # for PostgreSQL
+  "celery"             # Celery works with RabbitMQ out of the box
+]
+
+
+
+
+
