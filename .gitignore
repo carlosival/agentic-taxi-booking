@@ -4,7 +4,7 @@ docker-compose.yml
 docker-compose.debug.yml
 docker-compose.test.debug.yml
 docker-compose.test.yml
-docker-stack
+docker-stack.yml
 
 /docs
 deploy-secrets.sh

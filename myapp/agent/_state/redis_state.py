@@ -4,6 +4,7 @@ import json
 import re
 import logging
 from typing import Dict, Any, Optional
+from utils.utils import get_secret
 try:
     from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
 except ImportError:
@@ -14,17 +15,19 @@ logger = logging.getLogger(__name__)
 
 class RedisState(BookingStateRepository):
 
-    def __init__(self, session_id: str, redis_client: Optional[Redis] = None, host: str = 'localhost', port: int = 6379, db: int = 0, ttl: int = 86400):
-        self.redis = redis_client or self._create_redis_client(host, port, db)
+    def __init__(self, session_id: str, redis_client: Optional[Redis] = None, host: str = 'localhost', port: int = 6379, db: int = 0, ttl: int = 86400, password: Optional[str] = None):
+        self.redis = redis_client or self._create_redis_client(host, port, db, password)
         self.key = self._validate_and_format_key(session_id)
         self.ttl = ttl # for default 24h expressed as seconds
         # Add a cache state
     
-    def _create_redis_client(self, host: str, port: int, db: int) -> Redis:
+    def _create_redis_client(self, host: str, port: int, db: int, password: Optional[str]) -> Redis:
+        password = password or get_secret("REDIS_PASSWORD")
         return Redis(
             host=host, 
             port=port, 
-            db=db, 
+            db=db,
+            password=password, 
             decode_responses=True,
             socket_connect_timeout=5,
             socket_timeout=5,
