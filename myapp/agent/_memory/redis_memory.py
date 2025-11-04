@@ -4,7 +4,7 @@ import re
 import logging
 from typing import List, Dict, Optional
 from .interfaces import Memory
-
+from utils.utils import get_secret
 try:
     from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
 except ImportError:
@@ -16,17 +16,20 @@ logger = logging.getLogger(__name__)
 class RedisMemory(Memory):
     def __init__(self, session_id: str, redis_client: Optional[Redis] = None, 
                  host: str = 'localhost', port: int = 6379, db: int = 0, 
-                 ttl: int = 86400, max_messages: int = 1000):
-        self.redis = redis_client or self._create_redis_client(host, port, db)
+                 ttl: int = 86400, max_messages: int = 1000, password: Optional[str] = None):
+        self.redis = redis_client or self._create_redis_client(host, port, db, password)
         self.key = self._validate_and_format_key(session_id)
         self.ttl = ttl
         self.max_messages = max_messages
     
-    def _create_redis_client(self, host: str, port: int, db: int) -> Redis:
+    def _create_redis_client(self, host: str, port: int, db: int, password: Optional[str]) -> Redis:
+        password = password or get_secret("REDIS_PASSWORD")
+        
         return Redis(
-            host=host, 
-            port=port, 
-            db=db, 
+            host=host,
+            port=port,
+            db=db,
+            password=password,
             decode_responses=True,
             socket_connect_timeout=5,
             socket_timeout=5,

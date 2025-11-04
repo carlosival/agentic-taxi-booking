@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     await telegram_app.initialize()
     set_webhook_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={WEBHOOK_URL}"
     resp = requests.get(set_webhook_url).json()
-    print("Webhook configurado:", resp)
+    logger.info(" Telegram webhook configurado OK")
 
     # Ensure bucket exists
     found = minio_client.bucket_exists(BUCKET_NAME)

@@ -1,0 +1,135 @@
+services:
+  pytest:
+    container_name: pytest
+    
+    build:
+      context: ./myapp
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./myapp:/app
+    depends_on:
+        ollama:
+            condition: service_started
+        redis:
+            condition: service_started
+        rabbitmq:
+            condition: service_healthy
+        postgres:
+            condition: service_started
+        taskiq_worker:
+            condition: service_started
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - POSTGRES_HOST=postgres   # <-- add DB env vars
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=mydatabase
+      - DATABASE_URL=postgresql+asyncpg://myuser:mypassword@postgres:5432/taxi
+      - RABBITMQ_HOST=rabbitmq   # <-- add RabbitMQ env vars
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_URL=amqp://myuser:mypassword@rabbitmq:5672/
+      - PORT=3000
+      - WHATSAPP_TOKEN=fdgfgfgfdhjfhdjfd
+      - WHATSAPP_PHONE_NUMBER_ID=454594353
+      - PYTHONPATH=/app
+    command: pytest # Correct command to start the test
+    restart: unless-stopped  # Uncomment this if you want automatic restarts
+
+  taskiq_worker:
+    container_name: taskiq_worker
+    build:
+      context: ./myapp
+    volumes:
+      - ./myapp:/app
+    environment:
+      - RABBITMQ_URL=amqp://myuser:mypassword@rabbitmq:5672/
+      - DATABASE_URL=postgresql+asyncpg://myuser:mypassword@postgres:5432/taxi
+    command: taskiq worker jobs.worker:broker
+    depends_on:
+      rabbitmq:
+          condition: service_healthy
+      postgres:
+          condition: service_started
+    restart: unless-stopped
+
+
+
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    command: serve
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"     # AMQP protocol port
+      - "15672:15672"   # Management web UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=myuser
+      - RABBITMQ_DEFAULT_PASS=mypassword
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - POSTGRES_DB=taxi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  init_db:
+    build:
+      context: ./myapp
+    volumes:
+      - ./myapp:/app  
+    command: python -m db.init_db
+    depends_on:
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://myuser:mypassword@postgres:5432/taxi
+
+volumes:
+  ollama_data:
+  redis_data:
+  postgres_data:
+  rabbitmq_data:
+

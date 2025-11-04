@@ -1,0 +1,293 @@
+version: "3.9"
+
+services:
+  myapp:
+    image: myapp:latest
+    ports:
+      - target: 3000
+        published: 3000
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - ./myapp:/app
+    environment:
+      # LLM
+      - OLLAMA_HOST=http://ollama:11434
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # PostgresSQL
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_DB_FILE=/run/secrets/postgres_db
+
+      #RabbitMQ MessageBroker
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER_FILE=/run/secrets/rabbitmq_user
+      - RABBITMQ_PASSWORD_FILE=/run/secrets/rabbitmq_password
+
+      # Redis (optional authentication)
+      - REDIS_PASSWORD_FILE=/run/secrets/redis_password
+
+      # MinIO
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_USER_FILE=/run/secrets/minio_user
+      - MINIO_PASSWORD_FILE=/run/secrets/minio_password
+      - MINIO_SECURE=true
+
+      # API tokens
+      - WHATSAPP_TOKEN_FILE=/run/secrets/whatsapp_token
+      - TELEGRAM_TOKEN_FILE=/run/secrets/telegram_token
+
+      # Your app port
+      - PORT=3000
+      # Domain
+      - DOMAIN=taxiva.galaita.com
+    secrets:
+      - postgres_user
+      - postgres_password
+      - postgres_db
+      - rabbitmq_user
+      - rabbitmq_password
+      - redis_password
+      - minio_user
+      - minio_password
+      - whatsapp_token
+      - telegram_token
+    command: app:app --host 0.0.0.0 --port 3000
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.myapp.rule=Host(`taxiva.galaita.com`)"
+        - "traefik.http.services.myapp.loadbalancer.server.url=http://192.168.1.150:3000"
+        - "traefik.http.routers.myapp.entrypoints=websecure"
+        - "traefik.http.routers.myapp.tls=true"
+        - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+
+  taskiq_worker:
+    image: myapp:latest
+    volumes:
+      - ./myapp:/app
+    environment:
+      # PostgresSQL
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_DB_FILE=/run/secrets/postgres_db
+
+      #RabbitMQ MessageBroker
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER_FILE=/run/secrets/rabbitmq_user
+      - RABBITMQ_PASSWORD_FILE=/run/secrets/rabbitmq_password
+      - TELEGRAM_TOKEN_FILE=/run/secrets/telegram_token
+      - WHATSAPP_TOKEN_FILE=/run/secrets/whatsapp_token
+    secrets:
+      - postgres_user
+      - postgres_password
+      - postgres_db
+      - rabbitmq_user
+      - rabbitmq_password
+      - telegram_token
+      - whatsapp_token
+    command: taskiq worker jobs.worker:broker
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=GPU-e582bf89-f5c5-8be0-4789-93ff603fcfcf
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - /usr/share/ollama:/root/.ollama
+    command: serve
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - /var/lib/redis:/data
+    secrets:
+      - redis_password
+    command: >
+      sh -c "redis-server --save 60 1 --loglevel warning --requirepass $$(cat /run/secrets/redis_password)"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    configs:
+      - source: rabbitmq_conf_script
+        target: /usr/local/bin/generate-rabbitmq-conf.sh
+        mode: 0555
+    entrypoint: >
+      sh -c "
+        /usr/local/bin/generate-rabbitmq-conf.sh &&
+        rabbitmq-server
+      "
+    secrets:
+      - rabbitmq_user
+      - rabbitmq_password
+    volumes:
+      - /var/lib/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB_FILE: /run/secrets/postgres_db
+    secrets:
+      - postgres_user
+      - postgres_password
+      - postgres_db
+    volumes:
+      - /var/lib/postgresql:/var/lib/postgresql/data
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$(cat /run/secrets/postgres_user) -d $$(cat /run/secrets/postgres_db)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9090"
+    environment:
+      MINIO_USER_FILE: /run/secrets/minio_user
+      MINIO_PASSWORD_FILE: /run/secrets/minio_password
+    secrets:
+      - minio_user
+      - minio_password
+    ports:
+      - "9000:9000"
+      - "9090:9090"
+    volumes:
+      - /var/lib/minio:/data
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  init_db:
+    image: myapp:latest
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_DB_FILE=/run/secrets/postgres_db
+    secrets:
+      - postgres_user
+      - postgres_password
+      - postgres_db
+    command: >
+      sh -c '
+        echo "Waiting for dependencies...";
+
+        wait_for_port() {
+            host="$1"
+            port="$2"
+            while true; do
+                (echo > /dev/tcp/$host/$port) >/dev/null 2>&1 && break
+                echo "Waiting for $host:$port..."
+                sleep 2
+            done
+        }
+
+        wait_for_port postgres 5432
+
+        echo "All dependencies are ready. Starting app..."
+        exec python -m db.init_db"
+      '
+    deploy:
+      mode: replicated-job
+      replicas: 1
+      restart_policy:
+        condition: none
+
+secrets:
+  postgres_user:
+    external: true
+  postgres_password:
+    external: true
+  postgres_db:
+    external: true
+  rabbitmq_user:
+    external: true
+  rabbitmq_password:
+    external: true
+  redis_password:
+    external: true
+  minio_user:
+    external: true
+  minio_password:
+    external: true
+  whatsapp_token:
+    external: true
+  telegram_token:
+    external: true
+
+configs:
+  rabbitmq_conf_script:
+    file: generate-rabbitmq-conf.sh
+
