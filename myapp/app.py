@@ -9,7 +9,7 @@ import os
 from minio import Minio
 from controllers.wasap_controller import WhatsapController
 from controllers.telegramp_controller import TelegramController
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Document
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Document, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, ConversationHandler, filters
 import asyncio
 import requests
@@ -49,10 +49,30 @@ BUCKET_NAME = "uploads"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
+    # Crear la aplicación de Telegram
+    telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # --- REGISTRO DE HANDLERS ---
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(CommandHandler("message", message_command))
+    telegram_app.add_handler(CallbackQueryHandler(button_callback))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    telegram_app.add_handler(conv_handler)
+    telegram_app.add_handler(CommandHandler('cancel', cancel))
+
+    # --- Set bot commands once app starts ---
+    telegram_app.post_init = set_bot_commands
+
     # Init telegram bot
     await telegram_app.initialize()
+
+    # Save it globally for FastAPI
+    app.state.telegram_app = telegram_app
+    
     set_webhook_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook?url={WEBHOOK_URL}"
-    resp = requests.get(set_webhook_url).json()
+    requests.get(set_webhook_url).json()
+    
     logger.info(" Telegram webhook configurado OK")
 
     # Ensure bucket exists
@@ -70,8 +90,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Crear la aplicación de Telegram
-telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # ---- Join Drivers Conversation ---
 
@@ -88,6 +106,17 @@ async def join_driver(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     # initialize storage for this user in conversation
     context.user_data['uploaded_docs'] = []
     return DOCS
+
+async def set_bot_commands(app):
+    commands = [
+        BotCommand("start", "Start the bot"),
+        BotCommand("help", "Show help information"),
+        BotCommand("info", "Get information about the bot"),
+        BotCommand("join", "Get information about the bot"),
+        BotCommand("settings", "Change bot preferences"),
+    ]
+    await app.bot.set_my_commands(commands)
+
 
 async def collect_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Collect documents and reply OK when 3 are received."""
@@ -268,13 +297,7 @@ async def button_callback(update: Update, context):
     elif data == "help":
         await query.edit_message_text("Sección de ayuda ℹ️")
 
-# --- REGISTRO DE HANDLERS ---
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("message", message_command))
-telegram_app.add_handler(CallbackQueryHandler(button_callback))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-telegram_app.add_handler(conv_handler)
-telegram_app.add_handler(CommandHandler('cancel', cancel))
+
 
 # Define a route for the root URL
 @app.get("/")
@@ -319,6 +342,10 @@ async def receive_event(request: Request):
 @app.post("/telegram/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
+
+    # Access telegram app from FastAPI state
+    telegram_app = req.app.state.telegram_app
+
     update = Update.de_json(data, telegram_app.bot)
     await telegram_app.process_update(update)
     return {"status": "ok"}

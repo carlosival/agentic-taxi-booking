@@ -29,6 +29,7 @@ class AgentConfig:
         self.redis_host = os.getenv("REDIS_HOST", "localhost")
         self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
         self.redis_db = int(os.getenv("REDIS_DB", "0"))
+        self.redis_password = os.getenv("REDIS_PASSWORD", None)
         self.model_name = os.getenv("MODEL_NAME", "llama3")
         self.temperature = float(os.getenv("MODEL_TEMPERATURE", "0.0"))
         self.max_memory = int(os.getenv("MAX_MEMORY", "100"))
@@ -60,23 +61,24 @@ class Agent:
         self.tools = []
         
         # Initialize state and memory with error handling
+        
         try:
-            self.booking_state = RedisState(
-                session_id=self.session_id,
-                host=self.config.redis_host,
-                port=self.config.redis_port,
-                db=self.config.redis_db
-            )
+
+            redis_kwargs = {
+                "host": self.config.redis_host,
+                "port": self.config.redis_port,
+                "db": self.config.redis_db,
+            }
             
-            logger.info(f"Initialized Redis BookingState for session {self.session_id}")
-            
-            self.memory = RedisMemory(
-                session_id=self.session_id,
-                host=self.config.redis_host,
-                port=self.config.redis_port,
-                db=self.config.redis_db
-            )
+            if self.config.redis_password: 
+                redis_kwargs["password"] = self.config.redis_password
+
+            self.booking_state = RedisState(session_id=self.session_id, **redis_kwargs)
+            logger.info(f"Initialized RedisState for session {self.session_id}")
+
+            self.memory = RedisMemory(session_id=self.session_id, **redis_kwargs)
             logger.info(f"Initialized RedisMemory for session {self.session_id}")
+
                 
         except Exception as e:
             logger.error(f"Failed to initialize Redis connections: {e}")

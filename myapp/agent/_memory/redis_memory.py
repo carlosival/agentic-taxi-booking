@@ -1,41 +1,24 @@
 from redis.asyncio import Redis 
+from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
 import json
 import re
 import logging
 from typing import List, Dict, Optional
 from .interfaces import Memory
 from utils.utils import get_secret
-try:
-    from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
-except ImportError:
-    RedisError = Exception
-    RedisConnectionError = Exception
+from redis_db import redis_client as connection
+
+
 
 logger = logging.getLogger(__name__)
 
 class RedisMemory(Memory):
-    def __init__(self, session_id: str, redis_client: Optional[Redis] = None, 
-                 host: str = 'localhost', port: int = 6379, db: int = 0, 
-                 ttl: int = 86400, max_messages: int = 1000, password: Optional[str] = None):
-        self.redis = redis_client or self._create_redis_client(host, port, db, password)
+    def __init__(self, session_id: str, redis_client: Optional[Redis] = None):
+        self.redis = redis_client or connection
         self.key = self._validate_and_format_key(session_id)
-        self.ttl = ttl
-        self.max_messages = max_messages
+        self.ttl = 86400
+        self.max_messages = 1000
     
-    def _create_redis_client(self, host: str, port: int, db: int, password: Optional[str]) -> Redis:
-        password = password or get_secret("REDIS_PASSWORD")
-        
-        return Redis(
-            host=host,
-            port=port,
-            db=db,
-            password=password,
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5,
-            retry_on_timeout=True,
-            health_check_interval=30
-        )
     
     def _validate_and_format_key(self, session_id: str) -> str:
         if not session_id or not isinstance(session_id, str):

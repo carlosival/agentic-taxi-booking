@@ -18,6 +18,8 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_PASSWORD=
       - POSTGRES_HOST=postgres   # <-- add DB env vars
       - POSTGRES_PORT=5432
       - POSTGRES_USER=myuser
@@ -90,6 +92,7 @@ services:
       - ollama_data:/root/.ollama
     restart: unless-stopped
     command: serve
+
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -99,6 +102,7 @@ services:
       - redis_data:/data
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+  
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
