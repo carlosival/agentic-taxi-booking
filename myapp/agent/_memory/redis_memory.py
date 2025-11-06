@@ -5,8 +5,7 @@ import re
 import logging
 from typing import List, Dict, Optional
 from .interfaces import Memory
-from utils.utils import get_secret
-from redis_db import redis_client as connection
+from ..redis_db import redis_client as connection
 
 
 

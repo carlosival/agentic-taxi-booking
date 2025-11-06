@@ -4,9 +4,8 @@ import json
 import re
 import logging
 from typing import Dict, Any, Optional
-from utils.utils import get_secret
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
-from redis_db import redis_client as connection
+from ..redis_db import redis_client as connection
 
 
 logger = logging.getLogger(__name__)
