@@ -27,17 +27,15 @@ class DriverService:
         try:
 
             docs = data.get("docs")
-            if not docs or len(docs) < 3:
-                raise ValueError("At least 3 documents are required to create a driver")
+            if not docs or len(docs) < 1:
+                raise ValueError("At least 1 documents are required to create a driver")
 
             async with get_async_session() as session:
                 driver_repo = DriverRepository(session)
                 driver = driver = Driver(
                     channel=data.get("channel"),
                     channel_id=data.get("channel_id"),
-                    carnet=docs[0],
-                    licencia=docs[1],
-                    matricula=docs[2],
+                    licencia=docs[0],
                 )
                 return await driver_repo.create(driver)
 

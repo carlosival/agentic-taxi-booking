@@ -58,7 +58,8 @@ class TelegramController:
         async def create_driver(self, data: driverDto):
                 try:
                     drv_service = DriverService()
-                    await drv_service.create_driver(data)
+                    driver = await drv_service.create_driver(data)
+                    return driver
                 except Exception as error: 
                     print(f"❌ Error in handle_webhook: {error}")  
                     raise Exception("Problems handle message text: {error}")

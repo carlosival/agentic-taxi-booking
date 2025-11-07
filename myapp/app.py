@@ -93,14 +93,12 @@ app = FastAPI(lifespan=lifespan)
 
 # ---- Join Drivers Conversation ---
 
-DOC1, DOC2, DOC3 = range(3)
 DOCS = 0
 
 async def join_driver(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Entry point for /join. Ask user for the first document."""
     await update.message.reply_text(
-        "Please send document 1 of 3.\n"
-        "You can send any file (PDF, DOCX, image, etc.).\n"
+        "Please send driving license as PDF or image file \n"
         "Send /cancel to stop."
     )
     # initialize storage for this user in conversation
@@ -111,116 +109,63 @@ async def set_bot_commands(app):
     commands = [
         BotCommand("start", "Start the bot"),
         BotCommand("help", "Show help information"),
-        BotCommand("info", "Get information about the bot"),
         BotCommand("join", "Get information about the bot"),
-        BotCommand("settings", "Change bot preferences"),
     ]
     await app.bot.set_my_commands(commands)
 
 
 async def collect_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Collect documents and reply OK when 3 are received."""
-    doc = update.message.document
-    if not doc:
-        await update.message.reply_text("That’s not a document. Please send a valid file.")
-        return DOCS
+    
+    """
+    Collect ONE document or image, process it, upload to MinIO, and end.
+    """
+    message = update.message
+    file_obj = message.document or (message.photo[-1] if message.photo else None)
 
-    context.user_data['uploaded_docs'].append(doc)
-    count = len(context.user_data['uploaded_docs'])
+    # Validate file type
+    if not file_obj:
+        await message.reply_text("⚠️ Please send a valid document or image.")
+        return "WAITING_FOR_FILE"
 
-    if count < 3:
-        await update.message.reply_text(f"Got document {count}. Please send document {count+1}.")
-        # Create driver
-        return DOCS
+    await message.reply_text("📥 File received! Processing...")
+    
+    
+    # Download file from Telegram
+    telegram_file = await file_obj.get_file()
+    file_bytes = io.BytesIO()
+    await telegram_file.download_to_memory(out=file_bytes)
+    file_bytes.seek(0)
+
+    # Detect mime type properly
+    if message.document:
+        content_type = message.document.mime_type or "application/octet-stream"
+    elif message.photo:
+        content_type = "image/jpeg"  # Telegram always sends photos as JPEG
     else:
-        # 3 documents received
-        await update.message.reply_text("✅ OK, I received all 3 documents.")
-        
-        
-        process_docs = []
-        for d in context.user_data["uploaded_docs"]:
-            # Download file from Telegram
-            telegram_file = await d.get_file()
-            file_bytes = io.BytesIO()
-            await telegram_file.download_to_memory(out=file_bytes)
-            file_bytes.seek(0)
+        content_type = "application/octet-stream"
 
-            # Upload to MinIO
-            object_name = f"{update.message.from_user.id}/{uuid4()}"
-            await asyncio.to_thread(
-                minio_client.put_object,
-                BUCKET_NAME,
-                object_name,
-                file_bytes,
-                length=len(file_bytes.getvalue()),
-                content_type=d.mime_type or "application/octet-stream"
-            )
-            process_docs.append(object_name)
-
-
-
-        await telegram_controller.create_driver({"channel_id":str(update.message.from_user.id),"channel":"TELEGRAM", "docs": process_docs})
-
-        context.user_data.clear()
-        return ConversationHandler.END
-
-
-async def receive_carnet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receive first document and ask for the second."""
-    doc: Document = update.message.document
-    if not doc:
-        await update.message.reply_text("That's not a document. Please send a file (document).")
-        return DOC1
-
-    # download and save
-    file = await context.bot.get_file(doc.file_id)
-    local_path = f"doc_1_{doc.file_unique_id}_{doc.file_name or doc.file_id}"
-    await file.download_to_drive(custom_path=local_path)
-
-    context.user_data['uploaded_docs'].append(local_path)
-    await update.message.reply_text("Received document 1. Now please send document 2 of 3.")
-    return DOC2
-
-async def receive_licencia(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receive second document and ask for the third."""
-    doc: Document = update.message.document
-    if not doc:
-        await update.message.reply_text("That's not a document. Please send a file (document).")
-        return DOC2
-
-    file = await context.bot.get_file(doc.file_id)
-    local_path = f"doc_2_{doc.file_unique_id}_{doc.file_name or doc.file_id}"
-    await file.download_to_drive(custom_path=local_path)
-
-    context.user_data['uploaded_docs'].append(local_path)
-    await update.message.reply_text("Received document 2. Now please send document 3 of 3.")
-    return DOC3
-
-async def receive_matriculacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receive third document and finish."""
-    doc: Document = update.message.document
-    if not doc:
-        await update.message.reply_text("That's not a document. Please send a file (document).")
-        return DOC3
-
-    file = await context.bot.get_file(doc.file_id)
-    local_path = f"doc_3_{doc.file_unique_id}_{doc.file_name or doc.file_id}"
-    await file.download_to_drive(custom_path=local_path)
-
-    context.user_data['uploaded_docs'].append(local_path)
-
-    # Completed
-    uploaded = context.user_data.get('uploaded_docs', [])
-    await update.message.reply_text(
-        "All 3 documents received ✅\n"
-        + "\n".join(f"{i+1}: {p}" for i, p in enumerate(uploaded))
-        + "\n\nThank you!"
+    # Upload to MinIO
+    object_name = f"{update.message.from_user.id}/{uuid4()}"
+    await asyncio.to_thread(
+        minio_client.put_object,
+        BUCKET_NAME,
+        object_name,
+        file_bytes,
+        length=len(file_bytes.getvalue()),
+        content_type=content_type
     )
+        
+    drv =  await telegram_controller.create_driver({"channel_id":str(update.message.from_user.id),"channel":"TELEGRAM", "docs": [object_name]})
+    
+    if drv:
+        await message.reply_text("Welcome aboard! Driver registration completed")
+    else:
+        await message.reply_text("Something went wrong while creating the user. Please try again later")
 
-    # Here you can process the files in uploaded (e.g., move to permanent storage, send to admin, parse, etc.)
-    # Clear conversation data:
-    context.user_data.pop('uploaded_docs', None)
+
+    context.user_data.clear()
     return ConversationHandler.END
+
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Allow user to cancel."""
@@ -231,10 +176,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 conv_handler = ConversationHandler(
         entry_points=[CommandHandler('join', join_driver)],
         states={
-            DOCS: [MessageHandler(filters.Document.ALL, collect_docs)]
-            #DOC1: [MessageHandler(filters.Document.ALL, receive_carnet)],
-            #DOC2: [MessageHandler(filters.Document.ALL, receive_licencia)],
-            #DOC3: [MessageHandler(filters.Document.ALL, receive_matriculacion)],
+            DOCS: [MessageHandler(filters.Document.ALL | filters.PHOTO, collect_docs)]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
         allow_reentry=False,

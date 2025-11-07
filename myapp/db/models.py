@@ -50,7 +50,7 @@ class Driver(Base):
     name: Mapped[str] = mapped_column(nullable=True)
     rank: Mapped[int] = mapped_column(default=0)
     channel: Mapped[str] = mapped_column(default="WHATSAPP")
-    channel_id: Mapped[str] = mapped_column()
+    channel_id: Mapped[str] = mapped_column(unique=True, nullable=False)
     carnet: Mapped[Optional[str]] = mapped_column(nullable=True)
     licencia: Mapped[Optional[str]] = mapped_column(nullable=True)
     matricula: Mapped[Optional[str]] = mapped_column(nullable=True)
