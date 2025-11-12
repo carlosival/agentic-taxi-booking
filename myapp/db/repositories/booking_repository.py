@@ -1,7 +1,7 @@
 
 # repositories/driver_repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy import select, or_, desc
 from typing import Optional, Sequence
 from datetime import timedelta, timezone, datetime
 from db.models import BookingStatus    
@@ -20,20 +20,49 @@ class BookingRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_pending_bookings(self) -> Sequence[Booking]:
-            async with self.db.begin():
+    async def get_by_user_or_driver(self, from_id)-> Optional[Booking]:
+            try:
+                async with self.db.begin():
+                        stmt = (
+                        select(Booking)
+                        .options(joinedload(Booking.driver))
+                        .where(
+                            or_(
+                                Booking.customer_channel_id == from_id,
+                                Booking.driver.has(channel_id = from_id)
+                            )
+                        )
+                        .order_by(desc(Booking.timestamp_created))  # or desc(Booking.id) if no created_at
+                        .limit(1)
+                        )
 
-                timeout = timedelta(minutes=10)
-                now = datetime.now(timezone.utc)
-                cutoff_time = now - timeout
+                        result = await self.db.execute(stmt)
+                        booking = result.scalar_one_or_none()
+                        return booking
+            except Exception as error:
+                    #Log the exception
+                    logging.exception(f"Error while processing booking: {error}")    
+                    raise            
 
-                stmt = select(Booking).where(
-                    Booking.status == BookingStatus.pending.value,
-                    Booking.timestamp_created >= cutoff_time
-                ).limit(300)
+    async def get_pending_bookings_deprecated(self) -> Sequence[Booking]:
+            try:
+                async with self.db.begin():
 
-                result = await self.db.execute(stmt)
-                return result.scalars().all()
+                    timeout = timedelta(minutes=10)
+                    now = datetime.now(timezone.utc)
+                    cutoff_time = now - timeout
+
+                    stmt = select(Booking).where(
+                        Booking.status == BookingStatus.pending.value,
+                        Booking.timestamp_created >= cutoff_time
+                    ).limit(300)
+
+                    result = await self.db.execute(stmt)
+                    return result.scalars().all()
+            except Exception as error:
+                #Log the exception
+                logging.exception(f"Error while processing booking: {error}")    
+                raise
         
 
     async def lock_and_update_booking(self, noti_identifier: str):
@@ -55,13 +84,14 @@ class BookingRepository:
                 )
                 result = await self.db.execute(stmt)
                 notification = result.scalar_one_or_none()
+                
                 if notification:
                     notification.booking.driver_id = notification.driver.id
                     notification.booking.status = BookingStatus.confirmed
                     self.db.add(notification.booking)
-                    
+                    notification.booking
                 
-                return notification.booking
+                return None
             
         except OperationalError as e:
             # PostgreSQL message when another transaction holds the lock
@@ -97,7 +127,7 @@ class BookingRepository:
     async def get_by_noti_identifier(self, noti_identifier: str) -> Optional[Booking]:
             async with self.db.begin():
                 result = await self.db.execute(
-                    select(Booking).where(Booking.identifier == identifier).with_for_update()
+                    select(Booking).where(Booking.identifier == noti_identifier).with_for_update()
                 )
                 return result.scalar_one_or_none()
 

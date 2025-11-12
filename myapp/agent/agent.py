@@ -64,19 +64,10 @@ class Agent:
         
         try:
 
-            redis_kwargs = {
-                "host": self.config.redis_host,
-                "port": self.config.redis_port,
-                "db": self.config.redis_db,
-            }
-            
-            if self.config.redis_password: 
-                redis_kwargs["password"] = self.config.redis_password
-
-            self.booking_state = RedisState(session_id=self.session_id, **redis_kwargs)
+            self.booking_state = RedisState(session_id=self.session_id)
             logger.info(f"Initialized RedisState for session {self.session_id}")
 
-            self.memory = RedisMemory(session_id=self.session_id, **redis_kwargs)
+            self.memory = RedisMemory(session_id=self.session_id)
             logger.info(f"Initialized RedisMemory for session {self.session_id}")
 
                 
@@ -268,11 +259,7 @@ class Agent:
                 # Get booking summary for confirmation
                 booking_summary = await self.booking_state.summary()
                 
-                message = f"""✅ Booking confirmed!
-                📄 Confirmation ID: {confirmation_id}
-                📋 Booking Details:
-                {booking_summary}
-
+                message = f"""✅ Booking ID: {confirmation_id}
                 A driver will contact you shortly with further details."""
 
                 # Log the confirmation
@@ -493,8 +480,9 @@ class Agent:
                 return "I'm having trouble accessing your booking information. Let's start over."
             
             prompt = f"""
-        You are a helpful and courteous taxi booking assistant. 
-        Your job is to guide the user step by step to book a taxi, using a clear and friendly conversation.
+        System:    
+         - You are a helpful and courteous taxi booking assistant. 
+         - Your job is to guide the user step by step to book a taxi, using a clear and friendly conversation.
 
         💬 Language:
         - Detect and use the language the user prefers (e.g., English, Spanish).
@@ -646,7 +634,7 @@ class Agent:
                         continue
                     
                     # Process user input
-                    response = await self.process_input(user_input, session_user)
+                    response = await self.process_input(user_input, {"channel":"TELEGRAM","user_id":session_user})
                     print(f"Agent: {response}")
                     
                     # Check if booking is confirmed and complete

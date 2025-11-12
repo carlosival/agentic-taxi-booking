@@ -26,7 +26,35 @@ logger = logging.getLogger(__name__)
 
 class RelayService:
 
-    async def relay_message(self, from_platform, from_user, booking_ident, text):
+
+    async def guess_destination(self, from_user, channel):
+
+        booking = None
+
+        try: 
+            async with get_async_session() as session:
+                booking_repo = BookingRepository(session)
+                booking = await booking_repo.get_by_user_or_driver(from_user) # get from_user's booking, joined with driver
+
+                if booking and booking.driver:
+                    if booking.customer_channel_id == from_user and channel == booking.customer_channel:
+                        return ("to driver", booking.identifier, booking.driver.channel_id, booking.driver.channel)
+                    if booking.driver.channel_id == from_user and channel == booking.driver.channel:
+                        return ("to user", booking.identifier, booking.channel_id, booking.channel)
+                return None
+        except Exception as error:
+            logger.exception(error)
+            return None
+
+    async def relay_message(self, to_plataform, to_user, text):
+                try:
+                    # Forward to correct connector
+                    await self.send_to_platform(to_plataform, to_user, text)
+                except Exception as error:
+                    logger.exception(error)
+                    raise
+
+    async def relay_message_deprecated(self, from_platform, from_user, booking_ident, text):
         try:
             async with get_async_session() as session:
                 booking_repo = BookingRepository(session)

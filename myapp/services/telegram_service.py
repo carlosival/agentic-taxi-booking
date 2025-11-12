@@ -65,9 +65,9 @@ class TelegramSendMessageService:
             chat_id = message_req.to
             text = message_req.text
             reply_markup = self._build_reply_markup(message_req.components)
-            print(f"markup {reply_markup}")
-            await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
-
+            
+            response = await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+            print(f"response: {response}")
 
         except Exception as error:
             logger.exception("Failed to send a message: %s", error)

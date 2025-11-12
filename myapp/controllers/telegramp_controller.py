@@ -17,11 +17,20 @@ class TelegramController:
         def __init__(self):
             pass  # Add dependencies if needed
 
-        async def relay_message(self, from_user, booking_identifier, msg):    
+        async def guess_destination(self, plataform="TELEGRAM", from_user=None):
 
             try:
                 relay_service = RelayService()
-                await relay_service.relay_message("TELEGRAM", from_user, booking_identifier, msg)
+                dst = await relay_service.guess_destination(from_user, plataform)
+                return dst               
+            except Exception as error: 
+                raise Exception(f"Problems handle message text: {error}")                
+
+        async def relay_message(self, plataform="TELEGRAM", to_user=None, msg=None):    
+
+            try:
+                relay_service = RelayService()
+                await relay_service.relay_message(plataform, to_user, msg)
                                
             except Exception as error: 
                 print(f"❌ Error in handle_webhook: {error}")  

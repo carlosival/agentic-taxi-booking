@@ -44,6 +44,7 @@ class MatchService:
                     return booking
 
             except Exception as error:
+                logger.error(error)
                 raise error 
                  
                  

@@ -5,17 +5,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-pool = redis.ConnectionPool(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-    db=int(os.getenv("REDIS_DB", 0)),
-    password=os.getenv("REDIS_PASSWORD", None),
+# Example: redis://:your_strong_password@redis:6379/0
+redis_url = f'redis://:{os.getenv("REDIS_PASSWORD", None)}@{os.getenv("REDIS_HOST", "localhost")}:{os.getenv("REDIS_PORT", 6379)}/{os.getenv("REDIS_DB", 0)}'
+print(f"redis url: {redis_url}")
+
+# Create the pool directly from the URL
+pool = redis.ConnectionPool.from_url(
+    redis_url,
     decode_responses=True,
     socket_connect_timeout=5,
     socket_timeout=5,
     retry_on_timeout=True,
-    health_check_interval=30
+    health_check_interval=30,
 )
+
 
 redis_client = redis.Redis(connection_pool=pool)
 

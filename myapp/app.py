@@ -55,10 +55,10 @@ async def lifespan(app: FastAPI):
 
     # --- REGISTRO DE HANDLERS ---
     telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(CommandHandler("message", message_command))
     telegram_app.add_handler(CallbackQueryHandler(button_callback))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_handler(conv_handler)
+    telegram_app.add_handler(relay_handler)
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_handler(CommandHandler('cancel', cancel))
 
     # --- Set bot commands once app starts ---
@@ -93,7 +93,63 @@ app = FastAPI(lifespan=lifespan)
 
 # ---- Join Drivers Conversation ---
 
-DOCS = 0
+# Conversation states
+DOCS, ASK_MESSAGE = 0,0
+
+async def relay_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        
+        # Look for last bookings of this persons and send a email to the other
+        src = update.message.from_user.id
+        
+        dst = await telegram_controller.guess_destination(from_user=str(src))
+        
+        if dst:
+            
+            dst_text, booking_id, channel_id, channel = dst
+            context.user_data["booking_id"] = booking_id
+            context.user_data["channel_id"] = channel_id
+            context.user_data["channel"] = channel
+            
+            keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_message")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                f'''📨 You can send a message {dst_text} related to booking {booking_id}
+                Please enter the message :''',
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+            return ASK_MESSAGE
+        
+        await update.message.reply_text('Could not find any related booking', parse_mode="Markdown")
+        
+        return ConversationHandler.END
+
+
+
+
+async def ask_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            booking_id = context.user_data["booking_id"]
+            channel_id = context.user_data["channel_id"]
+            channel = context.user_data["channel"]
+            text = update.message.text
+            sender = str(update.message.from_user.id)
+
+            try:
+                # await update.message.reply_text(f"⏳ Sending message to ...")
+                msg = f''' 
+                        related to booking {booking_id}\n 
+                        {text}    
+                       '''
+                await telegram_controller.relay_message(to_user=channel_id, msg=msg)
+                
+
+            except Exception as error:
+                #await  update.message.reply_text(f"❌ Failed to deliver message to..")
+
+            return ConversationHandler.END
+
+
 
 async def join_driver(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Entry point for /join. Ask user for the first document."""
@@ -169,9 +225,38 @@ async def collect_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Allow user to cancel."""
-    context.user_data.pop('uploaded_docs', None)
-    await update.message.reply_text("Upload canceled. To start again send /join")
+    #context.user_data.pop('uploaded_docs', None)
+    #context.user_data.pop('booking_id', None)
+    context.user_data.clear()
+    await update.message.reply_text("Command canceled.")
     return ConversationHandler.END
+
+# --- Cancel handler (for inline Cancel button) ---
+async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    query = update.callback_query
+    await query.answer()  # Acknowledge the button press quickly
+
+    # 🗑️ Delete the message that contained the inline keyboard
+    try:
+        await query.message.delete()
+    except Exception as e:
+        # Fallback in case message was already deleted or can't be removed
+        print(f"Could not delete message: {e}")
+
+    return ConversationHandler.END
+
+relay_handler = ConversationHandler(
+    entry_points=[CommandHandler("message", relay_message)],
+    states={
+        ASK_MESSAGE: [ 
+            MessageHandler(filters.TEXT & ~filters.COMMAND, ask_message), 
+            CallbackQueryHandler(cancel_callback, pattern="cancel_callback")
+            ]    
+    },
+    fallbacks=[CommandHandler("cancel", cancel)],
+    allow_reentry=True
+)
 
 conv_handler = ConversationHandler(
         entry_points=[CommandHandler('join', join_driver)],
@@ -185,13 +270,10 @@ conv_handler = ConversationHandler(
 # --- MENÚ PRINCIPAL ---
 async def start(update: Update, context):
     # Always visible menu buttons
-    keyboard = [["🚖 Book a Taxi", "Join","ℹ️ Help"]]
+    keyboard = [["Send Message", "🚖 Join as Taxi"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
     
-    await update.message.reply_text(
-        "Welcome! Choose an option:",
-        reply_markup=reply_markup
-    )
+    await update.message.reply_text("Welcome!")
 
 #--- MENU Handle Message ---
 
@@ -232,8 +314,12 @@ async def button_callback(update: Update, context):
 
     if data.startswith("driver_accept"):
         await telegram_controller.handle_button_accept(data)
-        
-    elif data.startswith("driver_cancel"):
+    elif data.startswith("cancel_message"): 
+        await cancel_callback(update, context)
+    elif data.startswith("driver_ignore"):
+        await query.edit_message_reply_markup(reply_markup=None)
+    
+    elif data.startswith("user_cancel"):
         await query.edit_message_reply_markup(reply_markup=None)
 
     elif data == "help":

@@ -79,17 +79,28 @@ class NotificationService:
                         if booking.customer_channel == "TELEGRAM":   
                             
                             if booking and driver and booking.driver_id == driver.id:
-                                message1 = f"""Driver have accept your request you can contact through this command /message driver {booking.id}
-                                                you can cancel service using /cancel {booking.id} 
-                                """ 
-                                await telegram_service.send_telegram_message(MessageRequest(to=booking.customer_channel_id, text=message1))
+                                message1 = f"""✅ Booking confirmed!  A driver will contact you shortly with further details""" 
+                                components = [{
+                                    "ctype" : "inline_keyboard",
+                                    "buttons": [
+                                                    
+                                                [{"text": "❌ Cancel", "callback_data": f"user_cancel_{booking.identifier}"}] 
+                                                             
+                                                ]
+                                }]
+                                await telegram_service.send_telegram_message(MessageRequest(to=booking.customer_channel_id, text=message1, components=components))
             
                             
                         if driver.channel == "TELEGRAM":
-                                message2 = f"""You have granted the service: 
-                                    you can contact user through this command /message user {booking.id}
-                                    you can cancel service using /cancel {booking.id}  
-                                    """ 
+                                message2 = f""" ✅ You have granted the service for booking {booking.identifier}, communicate to the user for any details:""" 
+                                components = [{
+                                    "ctype" : "inline_keyboard",
+                                    "buttons": [
+                                                    
+                                                [{"text": "❌ Cancel", "callback_data": f"driver_cancel_{booking.identifier}"}] 
+                                                             
+                                                ]
+                                }]
                                 await telegram_service.send_telegram_message(MessageRequest(to=driver.channel_id, text=message2))
                     
                     else:
@@ -161,7 +172,7 @@ class NotificationService:
                             "buttons": [
                                             [
                                                 {"text": "✅ OK", "callback_data": f"driver_accept_{tracking_id}"},
-                                                {"text": "❌ Cancel", "callback_data": f"driver_cancel_{tracking_id}"} 
+                                                {"text": "❌ Ignore", "callback_data": f"driver_ignore_{tracking_id}"} 
                                                 
                                             ]
                                         ]
