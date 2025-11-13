@@ -56,14 +56,12 @@ async def lifespan(app: FastAPI):
     # --- REGISTRO DE HANDLERS ---
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CallbackQueryHandler(button_callback))
-    telegram_app.add_handler(conv_handler)
+    telegram_app.add_handler(join_handler)
     telegram_app.add_handler(relay_handler)
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     telegram_app.add_handler(CommandHandler('cancel', cancel))
 
-    # --- Set bot commands once app starts ---
-    telegram_app.post_init = set_bot_commands
-
+   
     # Init telegram bot
     await telegram_app.initialize()
 
@@ -129,45 +127,47 @@ async def relay_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def ask_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            booking_id = context.user_data["booking_id"]
-            channel_id = context.user_data["channel_id"]
-            channel = context.user_data["channel"]
-            text = update.message.text
-            sender = str(update.message.from_user.id)
+                booking_id = context.user_data["booking_id"]
+                channel_id = context.user_data["channel_id"]
+                channel = context.user_data["channel"]
+                text = update.message.text
+                sender = str(update.message.from_user.id)
 
-            try:
-                # await update.message.reply_text(f"⏳ Sending message to ...")
-                msg = f''' 
-                        related to booking {booking_id}\n 
-                        {text}    
-                       '''
-                await telegram_controller.relay_message(to_user=channel_id, msg=msg)
+                try:
+                    # await update.message.reply_text(f"⏳ Sending message to ...")
+                    msg = f''' 
+                            related to booking {booking_id}\n 
+                            {text}    
+                        '''
+                    await telegram_controller.relay_message(to_user=channel_id, msg=msg)
+                    
+                    
+                except Exception as error:
+                    await  update.message.reply_text(f"❌ Failed to deliver message to..")
                 
-
-            except Exception as error:
-                #await  update.message.reply_text(f"❌ Failed to deliver message to..")
-
-            return ConversationHandler.END
-
-
-
+                finally:
+                    return ConversationHandler.END
+                
+                
 async def join_driver(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Entry point for /join. Ask user for the first document."""
+    keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_message")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        "Please send driving license as PDF or image file \n"
-        "Send /cancel to stop."
+        "Please send driving license as PDF or image file", reply_markup = reply_markup
     )
     # initialize storage for this user in conversation
     context.user_data['uploaded_docs'] = []
     return DOCS
-
+""" 
 async def set_bot_commands(app):
     commands = [
         BotCommand("start", "Start the bot"),
         BotCommand("help", "Show help information"),
         BotCommand("join", "Get information about the bot"),
     ]
-    await app.bot.set_my_commands(commands)
+    await app.bot.set_my_commands(commands) """
 
 
 async def collect_docs(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -228,7 +228,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     #context.user_data.pop('uploaded_docs', None)
     #context.user_data.pop('booking_id', None)
     context.user_data.clear()
-    await update.message.reply_text("Command canceled.")
+    await update.message.reply_text("Join canceled.")
     return ConversationHandler.END
 
 # --- Cancel handler (for inline Cancel button) ---
@@ -247,7 +247,10 @@ async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 relay_handler = ConversationHandler(
-    entry_points=[CommandHandler("message", relay_message)],
+    entry_points=[
+                  CommandHandler("message", relay_message),
+                  MessageHandler(filters.Regex("^Send Message$"), relay_message)
+                  ],
     states={
         ASK_MESSAGE: [ 
             MessageHandler(filters.TEXT & ~filters.COMMAND, ask_message), 
@@ -258,8 +261,11 @@ relay_handler = ConversationHandler(
     allow_reentry=True
 )
 
-conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('join', join_driver)],
+join_handler = ConversationHandler(
+        entry_points=[ 
+                CommandHandler('join', join_driver), 
+                MessageHandler(filters.Regex("^🚖 Join as Driver$"), join_driver)
+            ],
         states={
             DOCS: [MessageHandler(filters.Document.ALL | filters.PHOTO, collect_docs)]
         },
@@ -270,10 +276,10 @@ conv_handler = ConversationHandler(
 # --- MENÚ PRINCIPAL ---
 async def start(update: Update, context):
     # Always visible menu buttons
-    keyboard = [["Send Message", "🚖 Join as Taxi"]]
+    keyboard = [["Send Message", "🚖 Join as Driver"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
     
-    await update.message.reply_text("Welcome!")
+    await update.message.reply_text("Welcome!", reply_markup=reply_markup)
 
 #--- MENU Handle Message ---
 

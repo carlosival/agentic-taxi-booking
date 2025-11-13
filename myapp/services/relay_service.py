@@ -40,7 +40,7 @@ class RelayService:
                     if booking.customer_channel_id == from_user and channel == booking.customer_channel:
                         return ("to driver", booking.identifier, booking.driver.channel_id, booking.driver.channel)
                     if booking.driver.channel_id == from_user and channel == booking.driver.channel:
-                        return ("to user", booking.identifier, booking.channel_id, booking.channel)
+                        return ("to user", booking.identifier, booking.customer_channel_id, booking.customer_channel)
                 return None
         except Exception as error:
             logger.exception(error)

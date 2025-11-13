@@ -55,7 +55,7 @@ class Agent:
         self.config = config or AgentConfig()
         self.config.validate()
         
-        self.session_id = session_id or self._generate_session_id()
+        self.session_id = session_id or self._generate_session_id() # Deprecate session the channel id
         self.customer_channel_id = customer_channel_id or self.session_id
         self.customer_channel = customer_channel
         self.tools = []
@@ -246,8 +246,6 @@ class Agent:
               
             # Auto-archive conversation implement later
             
-            # Get AsyncSession and pass to BookingService
-            
             booking_service = BookingService()
 
             new_booking = await booking_service.create_booking(await self.booking_state.get_state(),user_info) 
@@ -256,8 +254,6 @@ class Agent:
                 # Generate confirmation details
                 confirmation_id = str(new_booking.identifier)
                   
-                # Get booking summary for confirmation
-                booking_summary = await self.booking_state.summary()
                 
                 message = f"""✅ Booking ID: {confirmation_id}
                 A driver will contact you shortly with further details."""
@@ -266,6 +262,11 @@ class Agent:
                 if not await self.memory.add_ai_message(message, "finalize_booking"):
                     logger.warning(f"Failed to save confirmation message for {user_id}")
                 
+                # Before clear pass memory to a long memory support postgres table or blog file
+                # Auto-archive conversation implement later
+                
+                await self.booking_state.clear()
+                await self.memory.clear()
                 
                 logger.info(f"Booking finalized for {user_id}, confirmation: {confirmation_id}")
                 return message

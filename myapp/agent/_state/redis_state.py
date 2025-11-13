@@ -27,7 +27,7 @@ class RedisState(BookingStateRepository):
         if not sanitized:
             raise ValueError("session_id contains only invalid characters")
         
-        return f"chat:state:{sanitized}"
+        return f"chat:state:{sanitized}" 
     
     async def get_state(self) -> BookingState:
         try:
@@ -56,6 +56,16 @@ class RedisState(BookingStateRepository):
             logger.error(f"Redis error setting state for key {self.key}: {e}")
             return False
         
+    async def clear(self) -> bool:
+        if not self.key:
+            logger.warning("No key set for cleaning.")
+            return False
+        try:
+            result = await self.redis.delete(self.key)
+            return bool(result)  # True if a key was deleted, False otherwise
+        except (RedisError, RedisConnectionError) as e:
+            logger.exception(f"Redis error deleting key {self.key}: {e}")
+            return False
 
 
     def set_session(self, session_id: str):
