@@ -339,7 +339,11 @@ async def read_root():
      
      return {"Hello": "World"}
 
-
+# Define a route for the root URL
+@app.get("/health")
+async def health():
+     
+     return {"Health": "OK"}
 
 # Webhook verification (GET)
 @app.get("/webhook")
