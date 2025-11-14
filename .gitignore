@@ -1,6 +1,10 @@
 export-secrets.sh
 .vsc
-*__pychache__
+__pycache__/
+*.pyc
+*.pyo
+.devcontainer
+.pytest_cache
 docker-compose.yml
 docker-compose.debug.yml
 docker-compose.test.debug.yml
