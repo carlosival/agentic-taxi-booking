@@ -45,7 +45,7 @@ minio_client = Minio(
 )
 
 BUCKET_NAME = "uploads"
-
+driver_join_text = r"^\s*🚖?\s*Join as Driver\s*$"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,12 +53,14 @@ async def lifespan(app: FastAPI):
     # Crear la aplicación de Telegram
     telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
+    
+
     # --- REGISTRO DE HANDLERS ---
     telegram_app.add_handler(CommandHandler("start", start))
     telegram_app.add_handler(CallbackQueryHandler(button_callback))
     telegram_app.add_handler(join_handler)
     telegram_app.add_handler(relay_handler)
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(driver_join_text), handle_message))
     telegram_app.add_handler(CommandHandler('cancel', cancel))
 
    
@@ -264,13 +266,13 @@ relay_handler = ConversationHandler(
 join_handler = ConversationHandler(
         entry_points=[ 
                 CommandHandler('join', join_driver), 
-                MessageHandler(filters.Regex("^🚖 Join as Driver$"), join_driver)
+                MessageHandler(filters.Regex(driver_join_text), join_driver)
             ],
         states={
             DOCS: [MessageHandler(filters.Document.ALL | filters.PHOTO, collect_docs)]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-        allow_reentry=False,
+        allow_reentry=True,
     )
 
 # --- MENÚ PRINCIPAL ---
