@@ -337,13 +337,14 @@ async def button_callback(update: Update, context):
 @app.get("/")
 async def read_root():
      
-     return {"Hello": "World"}
+    return {"Hello": "World"}
 
 # Define a route for the root URL
 @app.get("/health")
 async def health():
-     
-     return {"Health": "OK"}
+
+    # Need to add all necesary request to external services(Test Deploy)
+    return {"Health": "OK"}
 
 # Webhook verification (GET)
 @app.get("/webhook")
