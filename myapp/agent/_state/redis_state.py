@@ -5,7 +5,7 @@ import re
 import logging
 from typing import Dict, Any, Optional
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
-from ..redis_db import redis_client as connection
+from ...db.redis_db import redis_client as connection
 
 
 logger = logging.getLogger(__name__)
