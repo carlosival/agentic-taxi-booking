@@ -69,7 +69,10 @@ class TelegramController:
                         ]    
                 },
                 fallbacks=[CommandHandler("cancel", self.cancel)],
-                allow_reentry=True
+                allow_reentry=True,
+                per_user=True,
+                per_chat=True
+               
                 )
             
 
@@ -87,8 +90,8 @@ class TelegramController:
                 app.add_handler(CallbackQueryHandler(self.button_callback))
                 app.add_handler(self.join_handler())
                 app.add_handler(self.relay_handler())
-                app.add_handler(MessageHandler(filters.LOCATION, self.handle_share_location))
-                app.add_handler(MessageHandler(filters.LOCATION & filters.UpdateType.EDITED_MESSAGE, self.handle_live_location))
+                app.add_handler(MessageHandler(filters.LOCATION, self.handle_location))
+                #app.add_handler(MessageHandler(filters.LOCATION & filters.UpdateType.EDITED_MESSAGE, self.handle_location))
                 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(r"driver_join_text"), self.handle_message))
                 app.add_handler(CommandHandler('cancel', self.cancel))
 
@@ -159,7 +162,7 @@ class TelegramController:
 
             return ConversationHandler.END
 
-        async def join_driver(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        async def join_driver(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             """Entry point for /join. Ask user for the first document."""
             keyboard = [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_message")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -257,7 +260,6 @@ class TelegramController:
 
 
 
-
         async def ask_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
                     booking_id = context.user_data["booking_id"]
                     channel_id = context.user_data["channel_id"]
@@ -282,8 +284,6 @@ class TelegramController:
                     
                     
     
-
-
         async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             """Allow user to cancel."""
             #context.user_data.pop('uploaded_docs', None)
@@ -312,6 +312,17 @@ class TelegramController:
             await self.handle_text_message(text, user_info)
             
 
+        async def handle_location(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+                    msg = update.message
+                    user = update.message.from_user
+
+                    if msg.venue:
+                        await msg.reply_text("This is a venue.")
+                    elif msg.location:
+                        if msg.location.live_period:
+                            await msg.reply_text("Live location received.")
+                        else:
+                            await msg.reply_text("One-time location received.")
         
     
         async def guess_destination(self, plataform="TELEGRAM", from_user=None):

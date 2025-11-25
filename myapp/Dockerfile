@@ -1,11 +1,11 @@
 # myapp/Dockerfile 
 
 #Preinstall linux with python and uv
-FROM python:3.12-slim-bookworm
-
+FROM python:3.12-bullseye
 
 # Working Dir on Docker guest continer 
 WORKDIR /app
+
 
 # Copy project files (prefer specific copy of project metadata before full source)
 COPY requirements.txt .

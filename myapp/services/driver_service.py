@@ -16,7 +16,7 @@ from db.repositories.driver_repository import DriverRepository
 from db.models import Driver
 from dtos.dtos import driverDto
 from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
-from ...db.redis_db import redis_client as connection
+from db.redis_db import redis_client as connection
 from redis.asyncio import Redis 
 import time
 
