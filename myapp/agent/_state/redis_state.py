@@ -80,6 +80,9 @@ class RedisState(BookingStateRepository):
             # Get current state
             current_state = await self.get_state()
             
+            # Aqui se pudiese comprobar que tipo de  data se va actualizar si es es del tipo
+
+
             # Update state with new data
             updated_state = current_state.model_copy(update=data)
             

@@ -11,6 +11,7 @@ from services.whatsapp_service import WhatsappSendMessageService
 from services.match_service import MatchService
 from services.driver_service import DriverService
 from services.relay_service import RelayService
+from services.geolocation_service import MapboxService
 from dtos.dtos import driverDto
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Document, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, ConversationHandler, filters
@@ -315,14 +316,25 @@ class TelegramController:
         async def handle_location(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
                     msg = update.message
                     user = update.message.from_user
+                    user_id = str(user.id)
+                    user_info = { "channel": conf.TELEGRAM_CHANNEL, "user_id" : user_id}
 
                     if msg.venue:
-                        await msg.reply_text("This is a venue.")
+                        # Can only be a user who send venue
+                        # converto a json format string 
+                        # call handler text message with the json string
+                        venue_to_text =""
+                        await self.handle_text_message(venue_to_text, user_info)
                     elif msg.location:
                         if msg.location.live_period:
                             await msg.reply_text("Live location received.")
                         else:
-                            await msg.reply_text("One-time location received.")
+                            # Can only be a user who send venue
+                            # converto a json format string 
+                            # call handler text message with the json string
+                            venue_to_text =""
+                            await self.handle_text_message(venue_to_text, user_info)
+
         
     
         async def guess_destination(self, plataform="TELEGRAM", from_user=None):

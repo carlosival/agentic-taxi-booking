@@ -8,13 +8,13 @@ import time
 import uuid
 from datetime import datetime
 from typing import Dict, Optional, Any
-from zoneinfo import ZoneInfo
 from ._tool import Tool
 from .tools import FinalizeBookingTool, UpdateBookingTool
 from langchain_ollama import ChatOllama
 from ._memory import RedisMemory
 from ._state import RedisState
 from services.booking_service import BookingService
+from services.geolocation_service import MapboxService
 from db.db import get_async_session
 
 # Configure logging
@@ -130,7 +130,7 @@ class Agent:
 
     def json_parser(self, json_str: str) -> Dict[str, Any]:
             """
-            Try to parse a string as JSON.
+            Try to parse a JSON string to Dict.
             If it fails, attempt to extract the first {...} block.
             If that also fails, try to parse it as a Python literal.
             """
@@ -339,7 +339,6 @@ class Agent:
             "pickup_location": "...",
             "destination": "...",
             "pickup_time": "...",
-            "passengers": ...,
             "special_requests": "...",
             "confirmed": true/false
         }}
@@ -390,6 +389,8 @@ class Agent:
                 logger.error(f"Invalid args type: {type(args)}")
                 return False
             
+
+
             # Update booking state
             update_success = await self.booking_state.update(args)
             if not update_success:
@@ -603,7 +604,71 @@ class Agent:
         logger.error(f"All {self.config.max_retries} LLM query attempts failed")
         return None
     
+    async def _process_pickup(self, args):
+
+        if "pickup_location" in args:
+            if isinstance(args["pickup_location"], dict) and args["pickup_location"].keys == {"lan", "lon", "place"}:
+                return
+
+            if type(args["pickup_location"]) == "str":
+                res = await MapboxService().forward_geocode(args["pickup_location"])
+                if len(res) > 0: 
+                    args["pickup_location"] = json.dumps(res[0].__dict__)
+                else:
+                    del args["pickup_location"]
+
+    async def _process_dropoff(self, args): 
+            if isinstance(args["destination"], dict) and args["destination"].keys == {"lan", "lon", "place"}:
+                return
+
+            if type(args["destination"]) == "str":
+                res = await MapboxService().forward_geocode(args["destination"])
+                if len(res) > 0: 
+                    args["destination"] = res[0].model_dump()
+                else:
+                    del args["destination"]
     
+    async def _process_time(self, args):  
+
+        if  "pickup_time" in args :
+
+            CURRENT_ISO_TIMESTAMP = datetime.now().isoformat(timespec='seconds')
+            request = args["pickup_time"]
+
+            """
+            Should return a JSON object { type: inmediate | schedule, target_time_iso: with the sifted time}
+            """
+
+            prompt=f"""
+                    
+                    Current Time: {CURRENT_ISO_TIMESTAMP}
+
+                    Analyze the user's pickup request.
+                    Return a JSON object with:
+                    1. "type": "immediate" or "scheduled"
+                    - Anything request over 25 minutes of {CURRENT_ISO_TIMESTAMP} classify it as "scheduled"
+                    2. "target_time_iso": If scheduled, output the exact target ISO timestamp. 
+                    - You must handle the logic of "next day" if the time is earlier than the current time.
+                    - Do not calculate the minute offset yourself. Just give the absolute time.
+
+                    User: { request }
+                    
+                    """
+
+
+            # Query LLM with retry logic
+            response = self.query_llm(prompt)
+            if not response:
+                logger.error(f"LLM query failed for proccess pickup time")
+            
+            
+            # Parse response
+            response_dict = self.json_parser(response)
+
+            # Validate the format with keys type and target_time_iso
+
+            args["pickup_time"] = json.dumps(response_dict)
+
 
     async def run(self, user_id: Optional[str] = None) -> None:
 
