@@ -27,6 +27,7 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 relay_service = RelayService()
+driver_service = DriverService()
 
 # Conversation states
 DOCS, ASK_MESSAGE = 0,0
@@ -314,8 +315,8 @@ class TelegramController:
             
 
         async def handle_location(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-                    msg = update.message
-                    user = update.message.from_user
+                    msg = update.effective_message
+                    user = update.effective_user
                     user_id = str(user.id)
                     user_info = { "channel": conf.TELEGRAM_CHANNEL, "user_id" : user_id}
 
@@ -327,7 +328,21 @@ class TelegramController:
                         await self.handle_text_message(venue_to_text, user_info)
                     elif msg.location:
                         if msg.location.live_period:
-                            await msg.reply_text("Live location received.")
+                            user_info["lat"] = msg.location.latitude
+                            user_info["lon"] = msg.location.longitude
+                            res = await driver_service.update_location(user_info)
+                            # 🔑 Only send message on FIRST live location
+                            if res and msg.edit_date is None:
+                                await context.bot.send_message(
+                                    chat_id = msg.chat_id,
+                                    text="📍 You are ready to go!"
+                                )
+                        elif not msg.location.live_period and msg.edit_date:
+                             await context.bot.send_message(
+                                    chat_id = msg.chat_id,
+                                    text="📍 Stop tracking!"
+                                )
+                            
                         else:
                             # Can only be a user who send venue
                             # converto a json format string 

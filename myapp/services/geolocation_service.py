@@ -1,14 +1,15 @@
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Depends
 from pydantic import BaseModel
-from pydantic_settings import BaseSettings
 from typing import List, Optional
 from contextlib import asynccontextmanager
 import os 
+from geopy.adapters import AioHTTPAdapter
+from geopy.geocoders import Nominatim
 
 MAPBOX_ACCESS_TOKEN = os.getenv("MAPBOX_TOKEN")
 
-# 2. Pydantic Models (Data Validation)
+# 2.Pydantic Models (Data Validation)
 class LocationParams(BaseModel):
     latitude: float
     longitude: float

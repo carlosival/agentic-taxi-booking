@@ -22,11 +22,14 @@
         },
 
         {
-        "name": "Debug current file",
+        "name": "Debug app.agent (module)",
         "type": "python",
         "request": "launch",
-        "program": "${file}"
-    }
+        "module": "app.agent",
+        "cwd": "${workspaceFolder}",
+        "justMyCode": false,
+        "console": "integratedTerminal"
+        }
         
     ]
 }

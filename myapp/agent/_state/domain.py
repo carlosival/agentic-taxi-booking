@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, Protocol, List
 from pydantic import BaseModel
+from datetime import datetime
 
 # 2. Pydantic Models (Data Validation)
 class LocationParams(BaseModel):
@@ -7,14 +8,22 @@ class LocationParams(BaseModel):
     longitude: float
     place: str
 
+class PickupParams(BaseModel):
+    type: str
+    target_time_iso: datetime
+    
+
 class BookingState(BaseModel):
-    pickup_location: Optional[str] = None
-    destination: Optional[str] = None
-    pickup_time: Optional[str] = None 
+    pickup_location: Optional[str] | Optional[LocationParams] = None
+    destination: Optional[str] | Optional[LocationParams] = None
+    pickup_time: Optional[str] | Optional[PickupParams] = None 
     special_requests: Optional[str] = None
     confirmed: bool = False
 
-
+class InputData(BaseModel):
+      input: str
+      channel: Optional[str] = "WHATSAPP"
+      user_id: str 
 
 class BookingStateRepository(Protocol):
 

@@ -1,0 +1,10 @@
+[console_scripts]
+taskiq = taskiq.__main__:main
+
+[opentelemetry_instrumentor]
+taskiq = taskiq.instrumentation:TaskiqInstrumentor
+
+[taskiq_cli]
+scheduler = taskiq.cli.scheduler.cmd:SchedulerCMD
+worker = taskiq.cli.worker.cmd:WorkerCMD
+

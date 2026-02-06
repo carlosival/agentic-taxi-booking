@@ -1,7 +1,7 @@
 # repositories/driver_repository.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, OperationalError
 from db.models import Driver
 from typing import Optional, Sequence
 import logging
@@ -48,6 +48,21 @@ class DriverRepository:
         async with self.db.begin():
             result = await self.db.execute(select(Driver).where(Driver.id == driver_id))
             return result.scalar_one_or_none()
+    
+    async def get_by_channel_id(self, driver_channel_id: int) -> Optional[Driver]:
+        try:
+            async with self.db.begin():
+                result = await self.db.execute(select(Driver).where(Driver.channel_id == driver_channel_id))
+                return result.scalar_one_or_none()
+        except OperationalError as db_conn_error:
+            logging.exception(f"Unexpected error while fetching drivers: {db_conn_error}")
+            return None
+
+        except Exception as error:
+            # Log any other unexpected errors
+            logging.exception(f"Unexpected error while fetching drivers: {error}")
+            return None
+        
 
 
     async def get_drivers_batch(self, last_id: int = 0, batch_size: int = 300):

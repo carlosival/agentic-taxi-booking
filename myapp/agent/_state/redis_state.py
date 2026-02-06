@@ -99,8 +99,8 @@ class RedisState(BookingStateRepository):
         return all([
             state.pickup_location,
             state.destination,
-            state.pickup_time,
-            state.passengers is not None
+            state.pickup_time
+            
         ])
 
     async def summary(self) -> str:

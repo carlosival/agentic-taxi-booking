@@ -8,75 +8,26 @@ import time
 import uuid
 from datetime import datetime
 from typing import Dict, Optional, Any
-from ._tool import Tool
-from .tools import FinalizeBookingTool, UpdateBookingTool
 from langchain_ollama import ChatOllama
 from ._memory import RedisMemory
-from ._state import RedisState
+from ._state import RedisState, InputData
 from services.booking_service import BookingService
 from services.geolocation_service import MapboxService
 from db.db import get_async_session
+from .tasks import booking_assitant_Agent, ExecContext, AgentConfig
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# Configuration with defaults
-class AgentConfig:
-    def __init__(self):
-        self.ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        self.redis_host = os.getenv("REDIS_HOST", "localhost")
-        self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        self.redis_db = int(os.getenv("REDIS_DB", "0"))
-        self.redis_password = os.getenv("REDIS_PASSWORD", None)
-        self.model_name = os.getenv("MODEL_NAME", "llama3")
-        self.temperature = float(os.getenv("MODEL_TEMPERATURE", "0.0"))
-        self.max_memory = int(os.getenv("MAX_MEMORY", "100"))
-        self.max_retries = int(os.getenv("MAX_RETRIES", "3"))
-        
-        # Archival settings
-        # self.enable_hybrid_memory = os.getenv("ENABLE_HYBRID_MEMORY", "true").lower() == "true"
-        # self.archive_threshold_hours = int(os.getenv("ARCHIVE_THRESHOLD_HOURS", "24"))
-        # self.auto_archive_on_completion = os.getenv("AUTO_ARCHIVE_ON_COMPLETION", "true").lower() == "true"
-        
-    def validate(self):
-        """Validate configuration parameters"""
-        if not self.ollama_host:
-            raise ValueError("OLLAMA_HOST environment variable is required")
-        if self.redis_port <= 0 or self.redis_port > 65535:
-            raise ValueError("Invalid REDIS_PORT")
-        if self.max_memory <= 0:
-            raise ValueError("MAX_MEMORY must be positive")
-
 class Agent:
-    def __init__(self, session_id: Optional[str] = None, config: Optional[AgentConfig] = None, 
-                 customer_channel_id: Optional[str] = None, customer_channel: str = "WHATSAPP"):
-        self.config = config or AgentConfig()
-        self.config.validate()
+    def __init__(self, config: Optional[AgentConfig] = None):
+            self.config = config
         
-        self.session_id = session_id or self._generate_session_id() # Deprecate session the channel id
-        self.customer_channel_id = customer_channel_id or self.session_id
-        self.customer_channel = customer_channel
-        self.tools = []
         
-        # Initialize state and memory with error handling
         
-        try:
-
-            self.booking_state = RedisState(session_id=self.session_id)
-            logger.info(f"Initialized RedisState for session {self.session_id}")
-
-            self.memory = RedisMemory(session_id=self.session_id)
-            logger.info(f"Initialized RedisMemory for session {self.session_id}")
-
-                
-        except Exception as e:
-            logger.error(f"Failed to initialize Redis connections: {e}")
-            raise RuntimeError(f"Agent initialization failed: {e}")
-        
-        logger.info(f"Agent initialized with session_id: {self.session_id}")
-    
     def _generate_session_id(self) -> str:
         """Generate a unique session ID"""
         return f"session-{uuid.uuid4().hex[:8]}-{int(time.time())}"
@@ -106,10 +57,7 @@ class Agent:
         self.booking_state = booking
         logger.info("Booking state instance updated")
     
-    def add_tool(self, tool: Tool) -> None:
-        """Add a tool to the tools list"""
-        self.tools.append(tool)
-        logger.info(f"Tool added: {tool.__class__.__name__}")
+    
     
     def set_session(self, session_id: str) -> bool:
         """Change the session ID and update state/memory accordingly"""
@@ -187,35 +135,18 @@ class Agent:
     async def process_input(self, user_input: str, user_info: dict) -> str:
         """Process user input and return response"""
         try:
-
+            
             user_id = user_info.get("user_id", "")
             user_channel = user_info.get("channel", None)
 
-            # Validate inputs
-            if not user_input or not isinstance(user_input, str):
-                return "Please provide a valid message."
-            
-            """ if not self._validate_session_id(user_id):
-                return "Invalid session. Please start a new conversation." """
-            
-            # Sanitize input
-            user_input = self._sanitize_input(user_input)
-            
-            # Set session for this request
-            if not self.set_session(user_id):
-                return "Unable to process your request. Please try again."
-            
-            # Update booking information
-            update_success = await self.gather_update_info(user_input, user_id)
-            if not update_success:
-                return "I had trouble processing your message. Could you please rephrase?"
+            input = InputData(input=user_input,user_id=user_id,channel=user_channel)
+            ctx = ExecContext(input=input,session_id=user_id, agent=AgentConfig())
+            result = await booking_assitant_Agent.run(ctx)
 
-            # Check if booking is confirmed
-            if await self.is_confirm():
-                return await self.finalize_booking(user_info)
+            #Validar response_to_user and output str
 
-            return await self.ask_follow(user_id)
-            
+            return result.output.get("args", "No es posible procesar su consulta")
+
         except Exception as e:
             logger.error(f"Error processing input: {e}")
             return "I'm sorry, I encountered an error. Let's start over."
@@ -313,7 +244,7 @@ class Agent:
             
             prompt = f"""
         You are a helpful and precise taxi booking assistant.
-        Read the system's question and the user's message carefully.
+        Read the system's questions and the user's message carefully.
         Extract **only** the booking fields you can confidently identify from the user's message.
         **Never guess or add missing information.**
         Include **only** fields actually present in the message.
@@ -509,9 +440,8 @@ class Agent:
         1. pickup_location
         2. destination
         3. pickup_time
-        4. passengers
-        5. special_requests
-        6. confirmed
+        4. special_requests
+        5. confirmed
 
         - If `special_requests` is `"N/A"` or empty, treat it as *no special request* — do NOT ask for it again, proceed to confirmation.
         - Politely ask the user for **only one missing piece of information at a time**.
